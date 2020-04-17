@@ -5,20 +5,19 @@ import geopandas as gpd
 import matplotlib
 import branca
 import pandas as pd
-
+from folium import plugins
 this_file_path = os.path.abspath(__file__)
 project_root = os.path.split(this_file_path)[0]
 sys.path.append(project_root)
 
 import etl_preprocess as etl
 
-
 dd = etl.download_data(project_root)
 dist = dd.get_gdata(db_name='District Coronavirus Plans Analysis public file', data_file='3.30.20')
 url = 'https://opendata.arcgis.com/datasets/95738ddb2b784336a60aff23312ff480_0.geojson'
 sub_ids = dist['ID'].to_list()
 
-dist_pol = dd.get_geo_data(location=url, subset_ids=sub_ids)
+#dist_pol = dd.get_geo_data(location=url, subset_ids=sub_ids)
 # add save functinality to function save = True parmeter and load from local or API
 #dist_pol.to_file(os.path.join(project_root,"data/district_subset.geojson"), driver='GeoJSON')
 dist_pol = gpd.read_file(os.path.join(project_root,"data/district_subset.geojson"))
@@ -27,10 +26,7 @@ dist_pol.plot()
 # save files locally not tracked as to not ping the api every time
 # Need to clean up headers 
 # Add colors to the districts and attach to the polygon data frame
-dist.columns
-dist.head
 
-dist_pol.head
 # join relevant features to geopd 
 # from district file
 rev_features = ['ID','DATE UPDATED','OVERVIEW','WIFI ACCESS PROVIDED', 'DEVICES PROVIDED','RESOURCES FOR SPECIAL POPULATIONS','LEVEL',
@@ -50,7 +46,30 @@ misc_data['ID'] = misc_data['ID'].apply(lambda x: '{0:0>7}'.format(x))
 misc_data = misc_data.rename(columns={"ID": "GEOID"})
 # merge with geodata
 dist_pol = dist_pol.merge(misc_data, on = 'GEOID')
+##########
+## Explore .dta files (STATA...yuck)
+df_dist = pd.read_stata(os.path.join(project_root, 'data/data06-newvars.dta'))
+list(df_dist.columns)
+vars_get = ['leaid','year','leaname','stateabb','totalenrollment','frl','censusid','schlev','pp_totexp','pc_frlstudentsps',
+'frl_high', 'nonwhite_high', 'st_num']
+df_sub = df_dist[vars_get]
+df_sub = df_sub[df_sub.year == 2015]
+dist = dist[pd.to_numeric(dist['ID'], errors='coerce').notnull()]
+dist.reset_index(drop=True, inplace=True)
+dist['ID'] = dist['ID'].apply(lambda x: '{0:0>7}'.format(x))
+sub_ids = dist['ID'].tolist()
+sub_ids
+df_sub = df_sub[df_sub['leaid'].isin(sub_ids)]
 
+df_sub['leaid'] = df_sub['leaid'].astype('int').astype('str')
+df_sub['leaid'] = df_sub['leaid'] = df_sub['leaid'].apply(lambda x: '{0:0>7}'.format(x))
+
+dist_pol['GEOID']
+
+#### Add map layers
+dist_pol_income = dist_pol.merge(df_sub, left_on='GEOID', right_on='leaid')
+
+###
 dist_pol = dist_pol.sort_values(
     by='PctNonWh',
     ascending=True
@@ -65,11 +84,10 @@ max
 
 color_ramp_size = branca.colormap.LinearColormap(
     colors=['#feebe2','#fbb4b9','#f768a1','#c51b8a','#7a0177'],
-    index = dist_pol['PctNonWh'].quantile([0.2,0.4,0.6,0.8]),
     vmin=min,
     vmax=max
-)
-color_ramp_size
+).to_step(n=5)
+
 color_ramp_size.caption="Non-White Student Population (%)"
 
 cat_col_dict = {
@@ -98,28 +116,13 @@ def style_function_poly(feature):
         'fillOpacity': 0.5,
         'weight':1
     }
-dist_pol.columns
 
 variable_pops = ['NAME','Schools','Students','PctNonWh']
 variable_alias = ['District:','No. of Schools:','Enrollment:','Non-White Proportion:']
 
-m = folium.Map(location=[38,-97], zoom_start=4,tiles="cartodbpositron")
+usa_base = folium.Map(location=[38,-97], zoom_start=4,tiles="cartodbpositron")
 
-stategeo = folium.GeoJson(
-    dist_pol,
-    name='US States',
-    style_function=style_function_poly,
-    highlight_function=lambda x: {
-        'fillOpacity':1
-    },
-    tooltip=folium.features.GeoJsonTooltip(
-        fields=variable_pops,
-        aliases=variable_alias,
-    )
-).add_to(m)
-color_ramp_size.add_to(m)
-m
-dist_pol.columns
+points = folium.FeatureGroup('District Info')
 # add markers with color codes
 #for lat, lon, pop_text, color in zip(dist_pol['Lat'],dist_pol['Long'],dist_pol['OVERVIEW'],dist_pol['color']):
 #    folium.Marker(location=[lat,lon], popup=pop_text, icon=folium.Icon(color=color)).add_to(m)
@@ -127,6 +130,12 @@ dist_pol.columns
 cols = ['SCHOOL CLOSURE START DATE','OVERVIEW','WIFI ACCESS PROVIDED','DEVICES PROVIDED','NAME']
 cols = ['color','Lat','Long']
 [dist_pol.columns.get_loc(c) for c in cols if c in dist_pol]
+
+with open(os.path.join(project_root, 'html/custom_popup.html'), 'r') as f:
+    popup_html_str = f.read()
+
+def f_string_convert_str(non_f_str: str):
+    return eval(f'f"""{non_f_str}"""')
 
 for i in range(dist_pol.shape[0]):
     tooltip = 'Click here for '+ dist_pol.iloc[i,6] +' COVID-19 information'
@@ -138,18 +147,8 @@ for i in range(dist_pol.shape[0]):
     over_text = dist_pol.iloc[i,23]
     device = dist_pol.iloc[i,25]
     wifi = dist_pol.iloc[i,24]
-    html = f'''
-<h2>{district}</h2>
-
-<strong>Closure Start Date:</strong> {closure}<br>
-<br>
-<p>
-<strong>Overview:</strong><br>
-{over_text}
-</p>
-<strong>Devices Provided:</strong> {device}<br>
-<strong>WiFi Provided:</strong> {wifi}<br>
-    '''
+    html = effify(popup_html_str)
+    
     iframe = branca.element.IFrame(html, width=300+180, height=400)
     popup = folium.Popup(iframe, max_width=650)
 
@@ -158,59 +157,83 @@ for i in range(dist_pol.shape[0]):
             fill = True,
             fill_color=color,
             color=color,
-            fill_opacity=0.7).add_to(m)
+            fill_opacity=0.7).add_to(points)
+
+usa_base.add_child(points)
 # add legend 
-legend_html = '''
-<div style="position: fixed; 
-    bottom: 100px; right: 100px; width: 190px; height: 190px; 
-    border:1px solid grey; 
-    z-index:9999; 
-    font-size:12px;
-">&nbsp; <b><font color=#090909>Distance Learning</font></b> &nbsp;<br>
-<br>
-<i class="Legend-categoryCircle"
-style="opacity:1; border:1px solid #1a9641; 
-background: #1a9641; height:15px; width:15px; display:inline-block"></i>&nbsp;<font color=#090909>Curriculum, instruction, and progress monitoring</font>&nbsp;<br> 
-<i class="Legend-categoryCircle"
-style="opacity:1; border:1px solid #a6d96a; 
-background: #a6d96a; height:15px; width:15px; display:inline-block"></i>&nbsp;<font color=#090909>Curriculum and instruction</font>&nbsp;<br></i>
-<i class="Legend-categoryCircle"
-style="opacity:1; border:1px solid #ffffbf; 
-background: #ffffbf; height:15px; width:15px; display:inline-block"></i>&nbsp;<font color=#090909>Formal curriculum but no instruction</font>&nbsp;<br> 
-<i class="Legend-categoryCircle"
-style="opacity:1; border:1px solid #fdae61; 
-background: #fdae61; height:15px; width:15px; display:inline-block"></i>&nbsp;<font color=#090909>Access to general resources only</font>&nbsp;<br></i>
-<i class="Legend-categoryCircle"
-style="opacity:1; border:1px solid #d7191c; 
-background: #d7191c; height:15px; width:15px; display:inline-block"></i>&nbsp;<font color=#090909>No educational resources</font>&nbsp;<br></i>
+with open(os.path.join(project_root, 'html/custom_legend.html'), 'r') as f:
+    legend_html_str = f.read()
 
-</div>
-'''
-m.get_root().html.add_child(folium.Element(legend_html))
-m
-m.save('map.html')
-# map
-map_layer_control = folium.Map(location=[38, -98], zoom_start=4)
+usa_base.get_root().html.add_child(folium.Element(legend_html_str))
 
-# add tiles to map
-folium.raster_layers.TileLayer('Open Street Map').add_to(map_layer_control)
-folium.raster_layers.TileLayer('Stamen Terrain').add_to(map_layer_control)
-folium.raster_layers.TileLayer('Stamen Toner').add_to(map_layer_control)
-folium.raster_layers.TileLayer('Stamen Watercolor').add_to(map_layer_control)
-folium.raster_layers.TileLayer('CartoDB Positron').add_to(map_layer_control)
-folium.raster_layers.TileLayer('CartoDB Dark_Matter').add_to(map_layer_control)
+race = folium.FeatureGroup('Non-White Student Population (%)', show=False)
 
-# add layer control to show different maps
-folium.LayerControl().add_to(map_layer_control)
+folium.GeoJson(
+    dist_pol,
+    name='US States',
+    style_function=style_function_poly,
+    highlight_function=lambda x: {
+        'fillOpacity':1
+    },
+    tooltip=folium.features.GeoJsonTooltip(
+        fields=variable_pops,
+        aliases=variable_alias,
+    )
+).add_to(race)
 
-# display map
-map_layer_control
+color_ramp_size.add_to(usa_base)
 
-map_test = folium.Map()
+exp = folium.FeatureGroup('Total Per-Pupil Expenditure', show=False)
 
-folium.GeoJson(test, name = 'geo_districts').add_to(map_test)
-folium.raster_layers.TileLayer('CartoDB Dark_Matter').add_to(map_test)
-folium.raster_layers.TileLayer('CartoDB Positron').add_to(map_test)
-# folium.LayerControl().add_to(map_test)
+# create color scales 
+grbblue = ['#d0d1e6','#a6bddb','#67a9cf','#1c9099','#016c59']
 
-map_test
+variable = 'pp_totexp'
+dist_pol_income=dist_pol_income.sort_values(by=variable, ascending=True)
+
+dist_pol_income[variable].quantile([0.05,0.95]).apply(lambda x: round(x, 2))
+
+color_ramp_rev = branca.colormap.LinearColormap(
+    colors=grbblue,
+    vmin=9445,
+    vmax=26815
+).to_step(n=5)
+color_ramp_rev
+color_ramp_rev.caption="Total Per-Pupil Expenditures ($)"
+
+
+def style_function_rev(feature):
+    return{
+        'fillColor': color_ramp_rev(feature['properties']['pp_totexp']),
+        'color': color_ramp_rev(feature['properties']['pp_totexp']),
+        'fillOpacity': 0.5,
+        'weight':1
+    } 
+
+variable_pops_ex=['NAME','Schools','Students','pp_totexp']
+variable_alias_ex=['District:','No. of Schools:','Enrollment:','Per-Pupil Expenditures:']
+
+folium.GeoJson(
+    dist_pol_income,
+    name='US States',
+    style_function=style_function_rev,
+    highlight_function=lambda x: {
+        'fillOpacity':1
+    },
+    tooltip=folium.features.GeoJsonTooltip(
+        fields=variable_pops_ex,
+        aliases=variable_alias_ex)).add_to(exp)
+
+
+color_ramp_rev.add_to(usa_base)
+
+##############
+
+usa_base.add_child(race)
+usa_base.add_child(exp)
+
+folium.LayerControl().add_to(usa_base)
+usa_base.keep_in_front(points)
+
+usa_base
+usa_base.save('map.html')
