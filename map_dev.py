@@ -11,6 +11,7 @@ project_root = os.path.split(this_file_path)[0]
 sys.path.append(project_root)
 
 import etl_preprocess as etl
+import map_tools as mt
 
 dd = etl.download_data(project_root)
 dist = dd.get_gdata(db_name='District Coronavirus Plans Analysis public file', data_file='3.30.20')
@@ -147,7 +148,7 @@ for i in range(dist_pol.shape[0]):
     over_text = dist_pol.iloc[i,23]
     device = dist_pol.iloc[i,25]
     wifi = dist_pol.iloc[i,24]
-    html = effify(popup_html_str)
+    html = f_string_convert_str(popup_html_str)
     
     iframe = branca.element.IFrame(html, width=300+180, height=400)
     popup = folium.Popup(iframe, max_width=650)
@@ -161,7 +162,7 @@ for i in range(dist_pol.shape[0]):
 
 usa_base.add_child(points)
 # add legend 
-with open(os.path.join(project_root, 'html/custom_legend.html'), 'r') as f:
+with open(os.path.join(project_root, 'html/legend_update.html'), 'r') as f:
     legend_html_str = f.read()
 
 usa_base.get_root().html.add_child(folium.Element(legend_html_str))
@@ -227,13 +228,63 @@ folium.GeoJson(
 
 color_ramp_rev.add_to(usa_base)
 
-##############
+# add performance
+ach = folium.FeatureGroup('Student Achievement', show=False)
+
+# create color scales 
+red_blue = ['#ca0020','#f4a582','#f7f7f7','#92c5de','#0571b0']
+
+variable = 'z_allmath'
+dist_pol_perf=dist_pol_perf.sort_values(by=variable, ascending=True)
+
+dist_pol_perf[variable].quantile([0.05,0.95]).apply(lambda x: round(x, 2))
+
+min = dist_pol_perf[variable].min()
+max = dist_pol_perf[variable].max()
+
+color_ramp_perf = branca.colormap.LinearColormap(
+    colors=red_blue,
+    index=dist_pol_perf[variable].quantile([0.0,0.05,0.8,0.95]),
+    vmin=min,
+    vmax=max
+).to_step(n=5)
+
+color_ramp_perf
+color_ramp_perf.caption="Math Performance (Z-Score)"
+
+
+def style_function_perf(feature):
+    return{
+        'fillColor': color_ramp_perf(feature['properties']['z_allmath']),
+        'color': color_ramp_perf(feature['properties']['z_allmath']),
+        'fillOpacity': 0.5,
+        'weight':1
+    } 
+
+variable_pops_perf=['NAME','Schools','Students','z_allmath']
+variable_alias_perf=['District:','No. of Schools:','Enrollment:','Math Proficiency:']
+
+folium.GeoJson(
+    dist_pol_perf,
+    name='US States',
+    style_function=style_function_perf,
+    highlight_function=lambda x: {
+        'fillOpacity':1
+    },
+    tooltip=folium.features.GeoJsonTooltip(
+        fields=variable_pops_perf,
+        aliases=variable_alias_perf)).add_to(ach)
+
+
+color_ramp_perf.add_to(usa_base)
+#############
 
 usa_base.add_child(race)
 usa_base.add_child(exp)
+usa_base.add_child(ach)
 
-folium.LayerControl().add_to(usa_base)
+folium.LayerControl(position='topleft').add_to(usa_base)
 usa_base.keep_in_front(points)
+usa_base.add_child(mt.BindColormap(race, color_ramp_size)).add_child(mt.BindColormap(exp, color_ramp_rev)).add_child(mt.BindColormap(ach,color_ramp_perf))
 
-usa_base
 usa_base.save('map.html')
