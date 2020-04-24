@@ -78,6 +78,7 @@ dist_pol = dist_pol.merge(district_sub, on = 'GEOID')
 dist_pol = dist_pol.merge(misc_data, on = 'GEOID')
 dist_pol = dist_pol.merge(df_dems, left_on='GEOID', right_on='leaid')
 dist_pol = dist_pol.merge(df_seda, left_on='GEOID', right_on='leaid')
+
 ###
 dist_pol = dist_pol.sort_values(
     by='PctNonWh',

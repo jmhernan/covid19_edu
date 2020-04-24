@@ -86,3 +86,12 @@ class DownloadData:
 				df_sub = df_sub[df_sub['leaid'].isin(subset_ids)]
 
 		return df_sub
+
+def pct_str(df, num_col):
+    if df[num_col][1] > 1:
+        pct_str = df[num_col].round(2).astype(str) + '%'
+        return pct_str
+    else:
+        pct_str = df[num_col]*100
+        pct_str = pct_str.round(2).astype(str) + '%' 
+        return pct_str
