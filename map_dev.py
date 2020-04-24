@@ -13,12 +13,17 @@ sys.path.append(project_root)
 import etl_preprocess as etl
 import map_tools as mt
 
-dd = etl.download_data(project_root)
-dist = dd.get_gdata(db_name='District Coronavirus Plans Analysis public file', data_file='3.30.20')
+dd = etl.DownloadData(project_root)
+dist = dd.get_gsdata(db_name='District Coronavirus Plans Analysis public file', data_file='3.30.20')
 url = 'https://opendata.arcgis.com/datasets/95738ddb2b784336a60aff23312ff480_0.geojson'
-sub_ids = dist['ID'].to_list()
 
-#dist_pol = dd.get_geo_data(location=url, subset_ids=sub_ids)
+# get ID's corresponding to district focus
+dist = dist[pd.to_numeric(dist['ID'], errors='coerce').notnull()]
+dist.reset_index(drop=True, inplace=True)
+dist['ID'] = dist['ID'].apply(lambda x: '{0:0>7}'.format(x))
+sub_ids = dist['ID'].tolist()
+
+#dist_pol = dd.get_geodata(location=url, subset_ids=sub_ids)
 # add save functinality to function save = True parmeter and load from local or API
 #dist_pol.to_file(os.path.join(project_root,"data/district_subset.geojson"), driver='GeoJSON')
 dist_pol = gpd.read_file(os.path.join(project_root,"data/district_subset.geojson"))
@@ -37,39 +42,42 @@ district_sub = district_sub[pd.to_numeric(district_sub['ID'], errors='coerce').n
 district_sub.reset_index(drop=True, inplace=True)
 district_sub['ID'] = district_sub['ID'].apply(lambda x: '{0:0>7}'.format(x))
 district_sub = district_sub.rename(columns={"ID": "GEOID"})
-# merge with geodata
-dist_pol = dist_pol.merge(district_sub, on = 'GEOID')
+district_sub['OVERVIEW'] = district_sub['OVERVIEW'].str.replace('\n', '<br>') # replace the \n with <br> not the best fix (hacky)
 
-# data from other sources
-misc_data = dd.get_gdata(db_name='District Coronavirus Plans Analysis public file', data_file='EISi extract match')
+# data from other google sheet 
+misc_data = dd.get_gsdata(db_name='District Coronavirus Plans Analysis public file', data_file='EISi extract match')
 misc_data = misc_data.drop('DISTRICT', axis = 1)
 misc_data['ID'] = misc_data['ID'].apply(lambda x: '{0:0>7}'.format(x))
 misc_data = misc_data.rename(columns={"ID": "GEOID"})
-# merge with geodata
-dist_pol = dist_pol.merge(misc_data, on = 'GEOID')
 ##########
 ## Explore .dta files (STATA...yuck)
-df_dist = pd.read_stata(os.path.join(project_root, 'data/data06-newvars.dta'))
-list(df_dist.columns)
-vars_get = ['leaid','year','leaname','stateabb','totalenrollment','frl','censusid','schlev','pp_totexp','pc_frlstudentsps',
-'frl_high', 'nonwhite_high', 'st_num']
-df_sub = df_dist[vars_get]
-df_sub = df_sub[df_sub.year == 2015]
-dist = dist[pd.to_numeric(dist['ID'], errors='coerce').notnull()]
-dist.reset_index(drop=True, inplace=True)
-dist['ID'] = dist['ID'].apply(lambda x: '{0:0>7}'.format(x))
-sub_ids = dist['ID'].tolist()
-sub_ids
-df_sub = df_sub[df_sub['leaid'].isin(sub_ids)]
+df_dems = dd.get_locdata(file_name='data06-newvars.dta')
+# 2017 most recent pass list of variables that we will use for map +
+# pass list of districts we want to focus on
 
-df_sub['leaid'] = df_sub['leaid'].astype('int').astype('str')
-df_sub['leaid'] = df_sub['leaid'] = df_sub['leaid'].apply(lambda x: '{0:0>7}'.format(x))
+vars_dems = ['leaid','year','leaname','stateabb','totalenrollment','frl','censusid','schlev','pp_totexp','pc_frlstudentsps',
+'frl_high', 'nonwhite_high', 'st_num', 'pc_iepstudentsdist']
 
-dist_pol['GEOID']
+df_dems = dd.get_locdata(file_name='data06-newvars.dta', raw=False, vars_get=vars_dems,
+    subset_ids=sub_ids, sub_year=2016)
 
-#### Add map layers
-dist_pol_income = dist_pol.merge(df_sub, left_on='GEOID', right_on='leaid')
+# locate seda performance data 
+df_seda = dd.get_locdata(file_name='data02-seda.dta')
 
+max(df_seda['year'])
+# use mn_avgall 
+vars_seda = ['leaid', 'year', 'mn_avgallela', 'z_allela', 'pct_allela', 'mn_avgallmath', 'z_allmath',
+    'pct_allmath']
+
+df_seda = dd.get_locdata(file_name='data02-seda.dta', raw=False, vars_get=vars_seda,
+    subset_ids=sub_ids)
+
+# merge with geodata
+
+dist_pol = dist_pol.merge(district_sub, on = 'GEOID')
+dist_pol = dist_pol.merge(misc_data, on = 'GEOID')
+dist_pol = dist_pol.merge(df_dems, left_on='GEOID', right_on='leaid')
+dist_pol = dist_pol.merge(df_seda, left_on='GEOID', right_on='leaid')
 ###
 dist_pol = dist_pol.sort_values(
     by='PctNonWh',
@@ -131,7 +139,7 @@ points = folium.FeatureGroup('District Info')
 cols = ['SCHOOL CLOSURE START DATE','OVERVIEW','WIFI ACCESS PROVIDED','DEVICES PROVIDED','NAME']
 cols = ['color','Lat','Long']
 [dist_pol.columns.get_loc(c) for c in cols if c in dist_pol]
-
+dist_pol.columns[23] # find column name by index
 with open(os.path.join(project_root, 'html/custom_popup.html'), 'r') as f:
     popup_html_str = f.read()
 
@@ -142,7 +150,7 @@ for i in range(dist_pol.shape[0]):
     tooltip = 'Click here for '+ dist_pol.iloc[i,6] +' COVID-19 information'
     lat = dist_pol.iloc[i,33]
     lon = dist_pol.iloc[i,34]
-    color = dist_pol.iloc[i,37]
+    color = dist_pol.iloc[i,59]
     district = dist_pol.iloc[i,6] 
     closure = dist_pol.iloc[i,28]  
     over_text = dist_pol.iloc[i,23]
@@ -211,7 +219,7 @@ def style_function_rev(feature):
         'weight':1
     } 
 
-variable_pops_ex=['NAME','Schools','Students','pp_totexp']
+variable_pops_ex=['NAME','Schools','Students', 'pp_totexp']
 variable_alias_ex=['District:','No. of Schools:','Enrollment:','Per-Pupil Expenditures:']
 
 folium.GeoJson(

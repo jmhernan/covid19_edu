@@ -58,21 +58,26 @@ class DownloadData:
 			sub_df = full_district[full_district['GEOID'].isin(subset_ids)] 
 			return sub_df
 	
-	def get_locdata(self, file_name=None, raw=True, vars_get=None, subset_ids=None):
-		file_type = re.search(r'(\..*$)', file_name)
-		assert (file_type.group(0) == '.dta' or file_type.group(0) == '.csv'), "Only '.dta' and '.csv' files currently supported"
+	def get_locdata(self, file_name=None, raw=True, vars_get=None, subset_ids=None, sub_year=None):
+		'''
+		Docstring place holder
+		'''
+		assert (file_name.endswith('.csv') or file_name.endswith('.dta')), "Only '.dta' and '.csv' files currently supported"
 		
-		if file_type.group(0) == '.dta':
-			df = pd.read_stata(os.path.join(data_path, file_name))
-		elif file_type.group(0) == '.csv':
-			df = pd.read_csv(os.path.join(data_path, file_name))
+		if file_name.endswith('.dta'):
+			df = pd.read_stata(os.path.join(self.data_path, file_name))
+		elif file_name.endswith('.csv'):
+			df = pd.read_csv(os.path.join(self.data_path, file_name))
 
 		if raw == True:
-			print(df.columns)
+			print(list(df.columns))
 			return df	
 		else:
-			df_sub = df[vars_get]
-			max_yr = df_sub['year'].max()
+			if sub_year is None:
+				max_yr = df['year'].max()
+			else:
+				max_yr = sub_year
+			df_sub = df[vars_get] 
 			df_sub = df_sub[df_sub.year == max_yr]
 			df_sub['leaid'] = df_sub['leaid'].astype('int').astype('str')
 			df_sub['leaid'] = df_sub['leaid'] = df_sub['leaid'].apply(lambda x: '{0:0>7}'.format(x))
