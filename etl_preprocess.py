@@ -47,16 +47,21 @@ class DownloadData:
 			df = pd.DataFrame(list_of_hashes, columns=headers)
 		return df
 
-	def get_geodata(self, location=None, subset_ids=None):
-		if subset_ids is None:
-			full_district = gpd.read_file(location)
-			return full_district
-		else:
-			full_district = gpd.read_file(location)
-			subset_ids = [x for x in subset_ids if isinstance(x, int)]
-			subset_ids = ["%07d" %i for i in subset_ids] 
-			sub_df = full_district[full_district['GEOID'].isin(subset_ids)] 
+	def get_geodata(self, location=None, subset_ids=None, refresh=True):
+		if refresh is True:
+			if subset_ids is None:
+				full_district = gpd.read_file(location)
+				return full_district
+			else:
+				full_district = gpd.read_file(location)
+				subset_ids = [x for x in subset_ids if isinstance(x, int)]
+				subset_ids = ["%07d" %i for i in subset_ids] 
+				sub_df = full_district[full_district['GEOID'].isin(subset_ids)]
+				sub_df.to_file(os.path.join(self.data_path,'district_subset.geojson'), driver='GeoJSON') 
 			return sub_df
+		else:
+			local_df = gpd.read_file(os.path.join(self.data_path,'district_subset.geojson'))
+			return local_df
 	
 	def get_locdata(self, file_name=None, raw=True, vars_get=None, subset_ids=None, sub_year=None):
 		'''
@@ -95,3 +100,9 @@ def pct_str(df, num_col):
         pct_str = df[num_col]*100
         pct_str = pct_str.round(2).astype(str) + '%' 
         return pct_str
+
+def clean_id(df_id):
+	list_id = df_id.tolist()
+	subset_ids = [x for x in list_id if isinstance(x, int)]
+	subset_ids = ["%07d" %i for i in subset_ids]
+	return subset_ids 
