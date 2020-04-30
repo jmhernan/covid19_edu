@@ -106,3 +106,11 @@ def clean_id(df_id):
 	subset_ids = [x for x in list_id if isinstance(x, int)]
 	subset_ids = ["%07d" %i for i in subset_ids]
 	return subset_ids 
+
+def style_function(feature):
+    return{
+        'fillColor': color_ramp_frl(feature['properties'][var]),
+        'color': color_ramp_frl(feature['properties'][var]),
+        'fillOpacity': 0.5,
+        'weight':1
+    } 
