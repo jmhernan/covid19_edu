@@ -15,6 +15,7 @@
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
+from pandas._testing import assert_frame_equal
 import os
 import geojson
 import json
@@ -23,6 +24,7 @@ from pathlib import Path
 import geopandas as gpd
 import re
 import warnings
+
 
 
 this_file_path = os.path.abspath(__file__)
@@ -36,16 +38,20 @@ class DownloadData:
 		self.client = gspread.authorize(self.creds)	
 		self.data_path = os.path.join(project_root, 'data/')
 
-	def get_gsdata(self, db_name=None, data_file=None):
-		data = self.client.open(db_name)
-		if data_file is None:
-			print('Select the worksheet you want to download and pass as "data_file" var', data.worksheets())
+	def get_gsdata(self, db_name=None, data_file=None, refresh=False, file_name):
+		if refresh == True:
+			data = self.client.open(db_name)
+			if data_file is None:
+				print('Select the worksheet you want to download and pass as "data_file" var', data.worksheets())
+			else:
+				updated_data = data.worksheet(data_file)
+				list_of_hashes = updated_data.get_all_records()
+				headers = list_of_hashes.pop(0)
+				df = pd.DataFrame(list_of_hashes, columns=headers)
+			return df
 		else:
-			updated_data = data.worksheet(data_file)
-			list_of_hashes = updated_data.get_all_records()
-			headers = list_of_hashes.pop(0)
-			df = pd.DataFrame(list_of_hashes, columns=headers)
-		return df
+			df = pd.read_csv(os.path.join(self.data_path, file_name))
+			return df
 
 	def get_geodata(self, location=None, subset_ids=None, refresh=True):
 		if refresh is True:
@@ -107,10 +113,10 @@ def clean_id(df_id):
 	subset_ids = ["%07d" %i for i in subset_ids]
 	return subset_ids 
 
-def style_function(feature):
+def style_function(feature, color_ramp, var):
     return{
-        'fillColor': color_ramp_frl(feature['properties'][var]),
-        'color': color_ramp_frl(feature['properties'][var]),
+        'fillColor': color_ramp(feature['properties'][var]), #this is a function
+        'color': color_ramp(feature['properties'][var]),
         'fillOpacity': 0.5,
         'weight':1
     } 
