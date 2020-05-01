@@ -38,8 +38,8 @@ class DownloadData:
 		self.client = gspread.authorize(self.creds)	
 		self.data_path = os.path.join(project_root, 'data/')
 
-	def get_gsdata(self, db_name=None, data_file=None, refresh=False, file_name):
-		if refresh == True:
+	def get_gsdata(self, db_name=None, data_file=None, refresh=True):
+		if refresh is True:
 			data = self.client.open(db_name)
 			if data_file is None:
 				print('Select the worksheet you want to download and pass as "data_file" var', data.worksheets())
@@ -48,10 +48,11 @@ class DownloadData:
 				list_of_hashes = updated_data.get_all_records()
 				headers = list_of_hashes.pop(0)
 				df = pd.DataFrame(list_of_hashes, columns=headers)
+				df.to_csv(os.path.join(self.data_path, data_file + '.csv'))
 			return df
 		else:
-			df = pd.read_csv(os.path.join(self.data_path, file_name))
-			return df
+			local_df = pd.read_csv(os.path.join(self.data_path, data_file + '.csv'))
+			return local_df
 
 	def get_geodata(self, location=None, subset_ids=None, refresh=True):
 		if refresh is True:
@@ -98,6 +99,7 @@ class DownloadData:
 
 		return df_sub
 
+# Misc. functions
 def pct_str(df, num_col):
     if df[num_col][1] > 1:
         pct_str = df[num_col].round(2).astype(str) + '%'

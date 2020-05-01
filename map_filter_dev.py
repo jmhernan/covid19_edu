@@ -19,9 +19,13 @@ dd = etl.DownloadData(project_root)
 dist = dd.get_gsdata(db_name='District Coronavirus Plans Analysis public file', data_file='3.30.20')
 url = 'https://opendata.arcgis.com/datasets/95738ddb2b784336a60aff23312ff480_0.geojson'
 
+# check with updated data 
+dist_update = dd.get_gsdata(db_name='District Coronavirus Plans Analysis public file', data_file='Public-3.30.20')
+
+assert_frame_equal(dist, dist_update, check_dtype=False)
+dist_update.columns
 # get ID's corresponding to district focus
-sub_ids = dist['ID'].tolist()
-dist_pol = dd.get_geodata(location=url, subset_ids=sub_ids, refresh = False)
+dist_pol = dd.get_geodata(location=url, subset_ids=dist['ID'].tolist(), refresh = False)
 
 # from district file
 rev_features = ['ID','DATE UPDATED','OVERVIEW','WIFI ACCESS PROVIDED', 'DEVICES PROVIDED','RESOURCES FOR SPECIAL POPULATIONS','LEVEL',
