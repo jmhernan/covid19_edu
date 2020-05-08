@@ -215,6 +215,10 @@ exp_filter = folium.FeatureGroup('District Per-pupil Expenditures > $15,500', sh
 
 avg_exp = dist_sub['pp_totexp'] > 15500 
 dist_sub3 = dist_sub[avg_exp]
+dist_sub3['pp_totexp'] = dist_sub3.pp_totexp.round().astype(int)
+
+dist_sub3['pp_tot_plot'] = '$' + dist_sub3.apply(lambda x: '{:,}'.format(x['pp_totexp']), axis = 1)
+
 
 with open(os.path.join(project_root, 'html/custom_popup.html'), 'r') as f:
     popup_html_str = f.read()
