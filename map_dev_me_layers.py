@@ -74,7 +74,8 @@ dist_sub['frl_pct'] = etl.pct_str(dist_sub, 'pc_frlstudentsps')
 dist_sub['pct_allmath_plot'] = etl.pct_str(dist_sub, 'pct_allmath') 
 
 # initiate map 
-usa_base = folium.Map(location=[38,-97], zoom_start=4,tiles="cartodbpositron")
+usa_base = folium.Map(location=[38,-97], zoom_start=4,tiles=None)
+folium.TileLayer('cartodbpositron', show=False, control=False).add_to(usa_base)
 
 # Create points base group 
 dist_sub['LEVEL'].value_counts()
@@ -88,7 +89,10 @@ cat_col_dict = {
 
 dist_sub['color'] = dist_sub['LEVEL'].map(cat_col_dict)
 
-points = folium.FeatureGroup('All Districts')
+points = folium.FeatureGroup('All Districts', show=False, overlay=False)
+
+folium.TileLayer('cartodbpositron',show=True).add_to(points)
+
 
 cols_to_locate = ['DISTRICT','latitude','longitude','color', 'ENROLLMENT', 'pp_totexp', 'frl_pct', 'pct_allmath_plot',
     'OVERVIEW', 'REMOTE LEARNING DESCRIPTION']
@@ -126,7 +130,6 @@ for i in range(dist_sub.shape[0]):
             fill_opacity=0.7).add_to(points)
 
 usa_base.add_child(points)
-
 # add other filters
 # pop_filter = folium.FeatureGroup('District Non-White Population > 75%', show=False, overlay=False)
 # dist_sub.columns
@@ -172,8 +175,9 @@ usa_base.add_child(points)
 # usa_base.add_child(pop_filter)
 
 # add frl filter
-frl_filter = folium.FeatureGroup('District FRL Population > 75%', show=False)
-dist_sub.columns
+frl_filter = folium.FeatureGroup('District FRL Population > 75%', show=False, overlay=False)
+
+folium.TileLayer('cartodbpositron').add_to(frl_filter)
 
 high_frl = dist_sub['pc_frlstudentsps'] > .75 
 dist_sub2 = dist_sub[high_frl]
@@ -211,7 +215,9 @@ for i in range(dist_sub2.shape[0]):
 usa_base.add_child(frl_filter)
 
 # add pop totexp
-exp_filter = folium.FeatureGroup('District Per-pupil Expenditures > $15,500', show=False)
+exp_filter = folium.FeatureGroup('District Per-pupil Expenditures > $15,500', show=False, overlay=False)
+
+folium.TileLayer('cartodbpositron').add_to(exp_filter)
 
 avg_exp = dist_sub['pp_totexp'] > 15500 
 dist_sub3 = dist_sub[avg_exp]
@@ -254,6 +260,6 @@ with open(os.path.join(project_root, 'html/legend_update.html'), 'r') as f:
 usa_base.get_root().html.add_child(folium.Element(legend_html_str))
 
 folium.LayerControl(position='topleft').add_to(usa_base)
+usa_base
 
-
-usa_base.save('map_filters_all.html')
+usa_base.save('map_filters.html')
