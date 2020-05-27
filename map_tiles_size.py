@@ -1,3 +1,4 @@
+# NEED TO UPDATE AND FIX 
 import os
 import folium
 import geojsonio
@@ -72,9 +73,29 @@ dist_sub['pp_totexp'].hist(bins = bin_values)
 # create plot columns for asthetics 
 dist_sub['frl_pct'] = etl.pct_str(dist_sub, 'pc_frlstudentsps')
 dist_sub['pct_allmath_plot'] = etl.pct_str(dist_sub, 'pct_allmath') 
+dist_sub['pp_totexp'] = dist_sub.pp_totexp.round()
+dist_sub['pp_tot_plot'] = '$' + dist_sub.apply(lambda x: '{:,}'.format(x['pp_totexp']), axis = 1)
+# radius 
+dist_sub['ENROLLMENT'].describe()
+
+import math
+
+dist_sub['rad_test'] = (dist_sub['ENROLLMENT']*10/max(dist_sub['ENROLLMENT']))+5
+dist_sub['rad_test'].describe()
+dist_sub['rad_log'] = np.log(dist_sub['ENROLLMENT'])
+dist_sub['rad_test'].describe()
+# range of radius sizes
+dist_sub['ENROLLMENT'].describe()
+
+bin_values = np.arange(start=100, stop=115000, step=1000)
+bin_values
+dist_sub['ENROLLMENT'].hist(bins=bin_values)
+for i in range(7,20,1):
+    print(i)
 
 # initiate map 
-usa_base = folium.Map(location=[38,-97], zoom_start=4,tiles="cartodbpositron")
+usa_base = folium.Map(location=[38,-97], zoom_start=4,tiles=None)
+folium.TileLayer('CartoDB dark_matter', show=False, control=False).add_to(usa_base)
 
 # Create points base group 
 dist_sub['LEVEL'].value_counts()
@@ -88,10 +109,13 @@ cat_col_dict = {
 
 dist_sub['color'] = dist_sub['LEVEL'].map(cat_col_dict)
 
-points = folium.FeatureGroup('All Districts')
+points = folium.FeatureGroup('All Districts', show=False, overlay=False)
+
+folium.TileLayer('CartoDB dark_matter',show=True).add_to(points)
+
 
 cols_to_locate = ['DISTRICT','latitude','longitude','color', 'ENROLLMENT', 'pp_totexp', 'frl_pct', 'pct_allmath_plot',
-    'OVERVIEW', 'REMOTE LEARNING DESCRIPTION']
+    'OVERVIEW', 'REMOTE LEARNING DESCRIPTION', 'pp_tot_plot', 'rad_test', 'rad_log']
 
 [dist_sub.columns.get_loc(c) for c in cols_to_locate if c in dist_sub]
 
@@ -105,28 +129,29 @@ for i in range(dist_sub.shape[0]):
     tooltip = 'Click here for '+ dist_sub.iloc[i,0] +' COVID-19 information'
     lat = dist_sub.iloc[i,7]
     lon = dist_sub.iloc[i,8]
-    color = dist_sub.iloc[i,33]
+    color = dist_sub.iloc[i,36]
     district = dist_sub.iloc[i,0]   
     students = dist_sub.iloc[i,4]
-    totexp = dist_sub.iloc[i,17]
+    totexp = dist_sub.iloc[i,33]
     frl = dist_sub.iloc[i,31]
     prf = dist_sub.iloc[i,32]
     over_text = dist_sub.iloc[i,3]
     update = dist_sub.iloc[i,2]
     html = f_string_convert_str(popup_html_str)
-    
+    rad = dist_sub.iloc[i,34]
+
     iframe = branca.element.IFrame(html, width=300+180, height=400)
     popup = folium.Popup(iframe, max_width=650)
 
     marker = folium.CircleMarker(location = [lat,lon],
-        popup=popup, tooltip=tooltip,radius=7,
+        popup=popup, tooltip=tooltip,radius=rad,
+            stroke = False,
             fill = True,
             fill_color=color,
-            color=color,
-            fill_opacity=0.7).add_to(points)
+            # color=color,
+            fill_opacity=0.4).add_to(points)
 
 usa_base.add_child(points)
-
 # add other filters
 # pop_filter = folium.FeatureGroup('District Non-White Population > 75%', show=False, overlay=False)
 # dist_sub.columns
@@ -172,8 +197,9 @@ usa_base.add_child(points)
 # usa_base.add_child(pop_filter)
 
 # add frl filter
-frl_filter = folium.FeatureGroup('District FRL Population > 75%', show=False)
-dist_sub.columns
+frl_filter = folium.FeatureGroup('District FRL Population > 75%', show=False, overlay=False)
+
+folium.TileLayer('CartoDB dark_matter').add_to(frl_filter)
 
 high_frl = dist_sub['pc_frlstudentsps'] > .75 
 dist_sub2 = dist_sub[high_frl]
@@ -188,37 +214,37 @@ for i in range(dist_sub2.shape[0]):
     tooltip = 'Click here for '+ dist_sub2.iloc[i,0] +' COVID-19 information'
     lat = dist_sub2.iloc[i,7]
     lon = dist_sub2.iloc[i,8]
-    color = dist_sub2.iloc[i,33]
+    color = dist_sub2.iloc[i,36]
     district = dist_sub2.iloc[i,0]   
     students = dist_sub2.iloc[i,4]
-    totexp = dist_sub2.iloc[i,17]
+    totexp = dist_sub2.iloc[i,33]
     frl = dist_sub2.iloc[i,31]
     prf = dist_sub2.iloc[i,32]
     over_text = dist_sub2.iloc[i,3]
     update = dist_sub2.iloc[i,2]
+    rad = dist_sub2.iloc[i,34]
     html = f_string_convert_str(popup_html_str)
     
     iframe = branca.element.IFrame(html, width=300+180, height=400)
     popup = folium.Popup(iframe, max_width=650)
 
     marker = folium.CircleMarker(location = [lat,lon],
-        popup=popup, tooltip=tooltip,radius=7,
-            fill = True,
-            fill_color=color,
-            color=color,
-            fill_opacity=0.7).add_to(frl_filter)
+        popup=popup, tooltip=tooltip,radius=rad,
+        stroke = False,
+        fill = True,
+        fill_color=color,
+        # color=color,
+        fill_opacity=0.7).add_to(frl_filter)
 
 usa_base.add_child(frl_filter)
 
 # add pop totexp
-exp_filter = folium.FeatureGroup('District Per-pupil Expenditures > $15,500', show=False)
+exp_filter = folium.FeatureGroup('District Per-pupil Expenditures > $15,500', show=False, overlay=False)
+
+folium.TileLayer('CartoDB dark_matter').add_to(exp_filter)
 
 avg_exp = dist_sub['pp_totexp'] > 15500 
 dist_sub3 = dist_sub[avg_exp]
-dist_sub3['pp_totexp'] = dist_sub3.pp_totexp.round().astype(int)
-
-dist_sub3['pp_tot_plot'] = '$' + dist_sub3.apply(lambda x: '{:,}'.format(x['pp_totexp']), axis = 1)
-
 
 with open(os.path.join(project_root, 'html/custom_popup.html'), 'r') as f:
     popup_html_str = f.read()
@@ -230,25 +256,27 @@ for i in range(dist_sub3.shape[0]):
     tooltip = 'Click here for '+ dist_sub3.iloc[i,0] +' COVID-19 information'
     lat = dist_sub3.iloc[i,7]
     lon = dist_sub3.iloc[i,8]
-    color = dist_sub3.iloc[i,33]
+    color = dist_sub3.iloc[i,36]
     district = dist_sub3.iloc[i,0]   
     students = dist_sub3.iloc[i,4]
-    totexp = dist_sub3.iloc[i,17]
+    totexp = dist_sub3.iloc[i,33]
     frl = dist_sub3.iloc[i,31]
     prf = dist_sub3.iloc[i,32]
     over_text = dist_sub3.iloc[i,3]
     update = dist_sub3.iloc[i,2]
     html = f_string_convert_str(popup_html_str)
+    rad = dist_sub3.iloc[i,34]
     
     iframe = branca.element.IFrame(html, width=300+180, height=400)
     popup = folium.Popup(iframe, max_width=650)
 
     marker = folium.CircleMarker(location = [lat,lon],
-        popup=popup, tooltip=tooltip,radius=7,
+        popup=popup, tooltip=tooltip,radius=rad,
+            stroke = False,
             fill = True,
             fill_color=color,
-            color=color,
-            fill_opacity=0.7).add_to(exp_filter)
+            # color=color,
+            fill_opacity=0.4).add_to(exp_filter)
 usa_base.add_child(exp_filter)
 
 # add legend 
@@ -258,6 +286,6 @@ with open(os.path.join(project_root, 'html/legend_update.html'), 'r') as f:
 usa_base.get_root().html.add_child(folium.Element(legend_html_str))
 
 folium.LayerControl(position='topleft').add_to(usa_base)
+usa_base
 
-
-usa_base.save('map_filters_all_dev.html')
+usa_base.save('map_filters_dark_size_dev.html')
